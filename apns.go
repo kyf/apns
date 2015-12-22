@@ -254,9 +254,6 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 		resp.Success = true
 	}
 
-	resp.Success = true
-	resp.Error = nil
-
 	return
 }
 
