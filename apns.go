@@ -250,15 +250,18 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 		resp.Success = false
 		resp.AppleResponse = ApplePushResponses[r[1]]
 		err = errors.New(resp.AppleResponse)
+		if err != nil {
+			resp.Success = false
+			resp.Error = err
+		} else {
+			resp.Success = true
+			resp.Error = nil
+		}
 	case <-timeoutChannel:
 		resp.Success = true
 		resp.Error = nil
 	}
 
-	if err != nil {
-		resp.Success = false
-		resp.Error = err
-	}
 	return
 }
 
