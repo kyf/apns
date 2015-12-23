@@ -250,7 +250,7 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 		resp.Success = false
 		resp.AppleResponse = ApplePushResponses[r[1]]
 		err = errors.New(resp.AppleResponse)
-		if err != nil {
+		if !strings.EqualFold(resp.AppleResponse, ApplePushResponses[0]) {
 			resp.Success = false
 			resp.Error = err
 		} else {
