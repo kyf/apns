@@ -252,8 +252,13 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 		err = errors.New(resp.AppleResponse)
 	case <-timeoutChannel:
 		resp.Success = true
+		resp.Error = nil
 	}
 
+	if err != nil {
+		resp.Success = false
+		resp.Error = err
+	}
 	return
 }
 
