@@ -7,7 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"math/rand"
+	"fmt"
+	//"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -21,7 +22,7 @@ const MaxPayloadSizeBytes = 2048
 
 const IdentifierUbound = 9999
 
-const TimeoutSeconds = 2
+const TimeoutSeconds = 10
 
 const (
 	deviceTokenItemid            = 1
@@ -55,10 +56,10 @@ type PushNotification struct {
 	Priority    uint8
 }
 
-func NewPushNotification() (pn *PushNotification) {
+func NewPushNotification(identifier int32) (pn *PushNotification) {
 	pn = new(PushNotification)
 	pn.payload = make(map[string]interface{})
-	pn.Identifier = rand.New(rand.NewSource(time.Now().UnixNano())).Int31n(IdentifierUbound)
+	pn.Identifier = identifier //rand.New(rand.NewSource(time.Now().UnixNano())).Int31n(IdentifierUbound)
 	pn.Priority = 10
 	return
 }
@@ -169,13 +170,22 @@ type Client struct {
 	KeyBase64         string
 	tlsConn           *tls.Conn
 	conn              net.Conn
+	responseChannel   chan []byte
+	ErrorChan         chan error
+	LastIdentifier    int32
+	Flag              bool
+	ReadExit          chan int
+	Body              string
 }
 
 func NewClient(gateway, certificateFile, keyFile string) (c *Client) {
 	c = new(Client)
 	c.Gateway = gateway
+	c.Flag = true
 	c.CertificateFile = certificateFile
 	c.KeyFile = keyFile
+	c.LastIdentifier = -1
+	c.ReadExit = make(chan int, 1)
 	return
 }
 
@@ -211,6 +221,15 @@ func (client *Client) Connect() error {
 	}
 	client.tlsConn = tlsConn
 
+	client.responseChannel = make(chan []byte, 1)
+	client.ErrorChan = make(chan error)
+
+	go func() {
+		buffer := make([]byte, 6, 6)
+		client.tlsConn.Read(buffer)
+		client.responseChannel <- buffer
+	}()
+
 	return nil
 
 }
@@ -238,29 +257,26 @@ func (client *Client) Send(pn *PushNotification) (resp *PushNotificationResponse
 		timeoutChannel <- true
 	}()
 
-	responseChannel := make(chan []byte, 1)
 	go func() {
-		buffer := make([]byte, 6, 6)
-		client.tlsConn.Read(buffer)
-		responseChannel <- buffer
-	}()
-
-	select {
-	case r := <-responseChannel:
-		resp.Success = false
-		resp.AppleResponse = ApplePushResponses[r[1]]
-		err = errors.New(resp.AppleResponse)
-		if !strings.EqualFold(resp.AppleResponse, ApplePushResponses[0]) {
+		select {
+		case r := <-client.responseChannel:
 			resp.Success = false
-			resp.Error = err
-		} else {
+			resp.AppleResponse = ApplePushResponses[r[1]]
+			err = errors.New(resp.AppleResponse)
+			if !strings.EqualFold(resp.AppleResponse, ApplePushResponses[0]) {
+				resp.Success = false
+				resp.Error = err
+				client.ErrorChan <- err
+				client.LastIdentifier = int32(r[5])
+			} else {
+				resp.Success = true
+				resp.Error = nil
+			}
+		case <-timeoutChannel:
 			resp.Success = true
 			resp.Error = nil
 		}
-	case <-timeoutChannel:
-		resp.Success = true
-		resp.Error = nil
-	}
+	}()
 
 	return
 }
