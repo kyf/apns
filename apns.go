@@ -150,7 +150,7 @@ type PushNotificationResponse struct {
 
 func NewPushNotificationResponse() (resp *PushNotificationResponse) {
 	resp = new(PushNotificationResponse)
-	resp.Success = false
+	resp.Success = true
 	return
 }
 
@@ -186,6 +186,8 @@ func NewClient(gateway, certificateFile, keyFile string) (c *Client) {
 	c.KeyFile = keyFile
 	c.LastIdentifier = -1
 	c.ReadExit = make(chan int, 1)
+	c.responseChannel = make(chan []byte, 1)
+	c.ErrorChan = make(chan error)
 	return
 }
 
@@ -220,9 +222,6 @@ func (client *Client) Connect() error {
 		return err
 	}
 	client.tlsConn = tlsConn
-
-	client.responseChannel = make(chan []byte, 1)
-	client.ErrorChan = make(chan error)
 
 	go func() {
 		buffer := make([]byte, 6, 6)
